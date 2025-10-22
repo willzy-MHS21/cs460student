@@ -2,7 +2,7 @@
     <head>
         <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
         <meta content="utf-8" http-equiv="encoding">
-        <title>Default WebGL!</title>
+        <title>Asst4 Bonus</title>
         <style>
             html,
             body {
@@ -20,7 +20,23 @@
                 height: 100%;
             }
 
-            #bonus-btn {
+            #music-toggle {
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                font-size: 30px;
+                cursor: pointer;
+                color: white;
+                user-select: none;
+                z-index: 10;
+                transition: transform 0.2s;
+            }
+
+            #music-toggle:hover {
+                transform: scale(1.2);
+            }
+
+            #goback-btn {
                 position: fixed;
                 top: 20px;
                 right: 20px;
@@ -35,7 +51,7 @@
                 cursor: pointer;
             }
 
-            #bonus-btn:hover {
+            #goback-btn:hover {
                 background-color: #e68900;
             }
         </style>
@@ -68,6 +84,18 @@
         var c, gl;
         var v_shader, f_shader, shaderprogram;
         var vertices, indices, eye_vertex, v_buffer, i_buffer, eye_v_buffer;
+
+        // big fish color
+        var bigFishCurrentColor = [1.0, 0.0, 0.0, 0.7]; 
+        var bigFishTargetColor = [Math.random(), Math.random(), Math.random(), 0.7];
+        var colorChangeSpeed = 0.01;
+
+        // big fish position and rotation
+        var keys = {};
+        var bigFishOffset = [0, 0, 0];
+        var moveSpeed = 0.03;
+        var bigFishRotation = 0;
+        var rotationSpeed = 0.05;
 
         window.onload = function () {
             //************************************************************//
@@ -124,9 +152,47 @@
                 all_fish.push(createFish(random_offset, random_color, random_scale, 1));
             }
 
-            // navigate to bonus page
-            document.getElementById('bonus-btn').onclick = function() {
-                window.location.href = 'index_bonus.html';
+            // keyboard to control movement on the big fish
+            window.addEventListener('keydown', (e) => {
+                keys[e.key.toLowerCase()] = true;
+            });
+
+            window.addEventListener('keyup', (e) => {
+                keys[e.key.toLowerCase()] = false;
+            });
+
+            // mouse wheel to scale the big fish
+            window.addEventListener('wheel', (e) => {
+                var scaleChange = 0.05; 
+                // index 0 = v_buffer, 1 = i_buffer, 2 = eye, 3 = offset, 4 = color, 5 = scale
+                if (e.deltaY < 0) {
+                    all_fish[0][5] += scaleChange; 
+                    if (all_fish[0][5] > 3.0) {
+                        all_fish[0][5] = 3.0; // max scale
+                    }
+                } else {
+                    all_fish[0][5] -= scaleChange;
+                    if (all_fish[0][5] < 0.3) {
+                        all_fish[0][5] = 0.3; // min scale
+                    }
+                }
+            });
+
+            // background music
+            const bgm = document.getElementById('bgm');
+            const toggle = document.getElementById('music-toggle');
+
+            toggle.addEventListener('click', () => {
+                if (bgm.paused) {
+                    bgm.play();
+                } else {
+                    bgm.pause();
+                }
+            });
+
+            // navigate back to main page
+            document.getElementById('goback-btn').onclick = function() {
+                window.location.href = 'index.html';
             };
 
             animate();
@@ -197,6 +263,41 @@
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
             gl.disable(gl.DEPTH_TEST);
 
+            // update big fish position based on keyboard input
+            const margin = 0.1;
+            if (keys['w']) {
+                bigFishOffset[1] += moveSpeed;
+                if (bigFishOffset[1] > 1 - margin) bigFishOffset[1] = 1 - margin;
+            }
+            if (keys['s']) {
+                bigFishOffset[1] -= moveSpeed;
+                if (bigFishOffset[1] < -1 + margin) bigFishOffset[1] = -1 + margin;
+            }
+            if (keys['a']) {
+                bigFishOffset[0] -= moveSpeed;
+                if (bigFishOffset[0] < -1 + margin) bigFishOffset[0] = -1 + margin;
+            }
+            if (keys['d']) {
+                bigFishOffset[0] += moveSpeed;
+                if (bigFishOffset[0] > 1 - margin) bigFishOffset[0] = 1 - margin;
+            }
+            if (keys['q']) {
+                bigFishRotation += rotationSpeed;
+            }
+            if (keys['e']) {
+                bigFishRotation -= rotationSpeed;
+            }
+
+            // update big fish color gradually
+            for (let i = 0; i < 3; i++) {
+                bigFishCurrentColor[i] += (bigFishTargetColor[i] - bigFishCurrentColor[i]) * colorChangeSpeed;
+            }
+            if (Math.abs(bigFishCurrentColor[0] - bigFishTargetColor[0]) < 0.01 &&
+                Math.abs(bigFishCurrentColor[1] - bigFishTargetColor[1]) < 0.01 &&
+                Math.abs(bigFishCurrentColor[2] - bigFishTargetColor[2]) < 0.01) {
+                bigFishTargetColor = [Math.random(), Math.random(), Math.random(), 0.7];
+            }
+
             for (var r = 0; r < all_fish.length; r++) {
                 // current_buffers is a list of [v_buffer, i_buffer]-pairs
                 var current_buffers = all_fish[r];
@@ -230,32 +331,46 @@
                 gl.enableVertexAttribArray(a_position);
 
                 // find the uniform in the shader source
-                theta = Math.random() * 10 * Math.PI / 180;
-                var transform = [current_direction * current_scale * Math.cos(theta), Math.sin(theta), 0, 0,
-                                -Math.sin(theta), current_direction * current_scale * Math.cos(theta), 0, 0,
-                                0, 0, current_direction * current_scale * 1, 0,
-                                current_offset[0], current_offset[1], current_offset[2], 1];
-
                 var u_transform = gl.getUniformLocation(shaderprogram, 'u_transform');
-                gl.uniformMatrix4fv(u_transform, false, new Float32Array(transform));
-
-                var u_color = gl.getUniformLocation(shaderprogram, 'u_color');
-
-                // make color dynamic
-                t = performance.now() * 0.001;
-                a = 0.6 + 0.4 * Math.sin(t * 2.0); // 0.2..1.0
-                current_color = new Float32Array([
-                    0.3 + 0.2 * Math.sin(t + 0.0),
-                    0.6 + 0.2 * Math.sin(t + 2.0),
-                    0.9 + 0.1 * Math.sin(t + 4.0),
-                    a
-                ]);
                 if (r == 0) {
-                    // the large fish aka. first object should still be red!
-                    current_color = [1, 0, 0, .7];
+                    // big fish 
+                    cosR = Math.cos(bigFishRotation);
+                    sinR = Math.sin(bigFishRotation);
+
+                    let transform = [current_direction * current_scale * cosR, current_scale * sinR, 0, 0,
+                                    -sinR * current_scale, current_direction * current_scale * cosR, 0, 0,
+                                    0, 0, current_scale, 0,
+                                    bigFishOffset[0], bigFishOffset[1], 0, 1];
+
+                    gl.uniformMatrix4fv(u_transform, false, new Float32Array(transform));
+                } else {
+                    // small fish
+                    theta = Math.random() * 10 * Math.PI / 180;
+                    var transform = [current_direction * current_scale * Math.cos(theta), Math.sin(theta), 0, 0,
+                                    -Math.sin(theta), current_direction * current_scale * Math.cos(theta), 0, 0,
+                                    0, 0, current_direction * current_scale * 1, 0,
+                                    current_offset[0], current_offset[1], current_offset[2], 1];
+
+                    gl.uniformMatrix4fv(u_transform, false, new Float32Array(transform));
                 }
 
-                gl.uniform4fv(u_color, current_color);
+                var u_color = gl.getUniformLocation(shaderprogram, 'u_color');
+                if (r == 0) {
+                    // gradually changing big fish color
+                    gl.uniform4fv(u_color, new Float32Array(bigFishCurrentColor));
+                } else {
+                    // small fish keep dynamic ocean colors
+                    t = performance.now() * 0.001;
+                    a = 0.6 + 0.4 * Math.sin(t * 2.0);
+
+                    current_color = new Float32Array([
+                        0.3 + 0.2 * Math.sin(t + 0.0),
+                        0.6 + 0.2 * Math.sin(t + 2.0),
+                        0.9 + 0.1 * Math.sin(t + 4.0),
+                        a]);
+
+                    gl.uniform4fv(u_color, current_color);
+                }
 
                 //************************************************************//
                 //
@@ -283,7 +398,13 @@
     </script>
 
     <body>
-        <button id="bonus-btn">Bonus</button>
+        <audio id="bgm" src="underwater_sound_effect.mp3" autoplay loop></audio>
         <canvas id="c"></canvas>
+
+        <div id="music-toggle">
+            🎵
+        </div>
+
+        <button id="goback-btn">Go Back</button>
     </body>
 </html>

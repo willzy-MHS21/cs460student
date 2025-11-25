@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>WebGPU Bonus</title>
+        
+        <script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/loaders/babylon.glTF2FileLoader.min.js"></script>
+        <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        
+        <style>
+            html, body {
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                height: 100%;
+                overflow: hidden;
+                font-family: Arial, sans-serif;
+            }
+            
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                display: block;
+            }
+        </style>
+    </head>
+
+    <body>
+        <canvas id="renderCanvas"></canvas>
+        
+        <script type="module">
+            import { Pane } from 'https://cdn.jsdelivr.net/npm/tweakpane@4.0.5/dist/tweakpane.min.js';
+            
+            // Get reference to the canvas
+            const canvas = document.getElementById('renderCanvas');
+
+            var mesh, originalMaterial, scene, pane;
+            const PARAMS = {
+                material: 'original',
+                metallic: 0.5,
+                roughness: 0.5
+            };
+            
+            // Create WebGPU engine
+            let engine = new BABYLON.WebGPUEngine(canvas, {antialiasing: true});
+            await engine.initAsync();
+
+            // Create the scene
+            scene = new BABYLON.Scene(engine);
+            
+            // Load the poly.glb model
+            await BABYLON.SceneLoader.AppendAsync('', 'poly.glb', scene);
+            
+            mesh = scene.meshes.find(m => m.geometry);
+            if (mesh) {
+                originalMaterial = mesh.material;
+            }
+            
+            // Create default camera and light
+            scene.createDefaultCameraOrLight(true, true, true);
+            scene.activeCamera.attachControl(canvas, true);
+            
+            setupTweakpane();
+            
+            // Run the render loop
+            engine.runRenderLoop(() => scene.render());
+
+            // Handle window resize
+            addEventListener('resize', () => engine.resize());
+            
+            function setupTweakpane() {
+                pane = new Pane({title: 'PBR Materials'});
+                
+                pane.addBinding(PARAMS, 'material', {
+                    label: 'Material Type',
+                    options: {
+                        'Original': 'original',
+                        'Anisotropic (ani)': 'anisotropic',
+                        'Holographic (holo)': 'holographic',
+                        'SubSurface (sss)': 'subsurface',
+                        'Glass': 'glass',
+                        'Iridescence (iri)': 'iridescence',
+                        'Clear Coat': 'clearcoat',
+                        'Sheen': 'sheen'
+                    }
+                }).on('change', (e) => {
+                    applyMaterial(e.value);
+                });
+                
+                pane.addBinding(PARAMS, 'metallic', {min: 0, max: 1}).on('change', () => {
+                    if (mesh.material && mesh.material !== originalMaterial) {
+                        mesh.material.metallic = PARAMS.metallic;
+                    }
+                });
+                
+                pane.addBinding(PARAMS, 'roughness', {min: 0, max: 1}).on('change', () => {
+                    if (mesh.material && mesh.material !== originalMaterial) {
+                        mesh.material.roughness = PARAMS.roughness;
+                    }
+                });
+            }
+            
+            function applyMaterial(type) {
+                if (type === 'original') {
+                    mesh.material = originalMaterial;
+                    return;
+                }
+
+                // Create base PBR material with common properties
+                const mat = new BABYLON.PBRMaterial(type, scene);
+                mat.metallic = PARAMS.metallic;
+                mat.roughness = PARAMS.roughness;
+
+                // Apply type-specific properties
+                switch(type) {
+                    case 'anisotropic':
+                        mat.anisotropy.isEnabled = true;
+                        mat.anisotropy.intensity = 0.8;
+                        mat.anisotropy.angle = Math.PI / 4;
+                        mat.albedoColor = new BABYLON.Color3(0.8, 0.6, 0.4);
+                        break;
+
+                    case 'holographic':
+                        mat.iridescence.isEnabled = true;
+                        mat.iridescence.intensity = 1.0;
+                        mat.iridescence.indexOfRefraction = 1.3;
+                        mat.albedoColor = new BABYLON.Color3(0.9, 0.9, 1.0);
+                        break;
+
+                    case 'subsurface':
+                        mat.subSurface.isTranslucencyEnabled = true;
+                        mat.subSurface.translucencyIntensity = 0.8;
+                        mat.subSurface.tintColor = new BABYLON.Color3(1.0, 0.3, 0.3);
+                        mat.albedoColor = new BABYLON.Color3(0.9, 0.8, 0.8);
+                        break;
+
+                    case 'glass':
+                        mat.alpha = 0.5;
+                        mat.indexOfRefraction = 1.5;
+                        mat.subSurface.isRefractionEnabled = true;
+                        mat.subSurface.refractionIntensity = 1.0;
+                        mat.albedoColor = new BABYLON.Color3(0.9, 0.95, 1.0);
+                        break;
+                        
+                    case 'iridescence':
+                        mat.iridescence.isEnabled = true;
+                        mat.iridescence.intensity = 1.0;
+                        mat.iridescence.minimumThickness = 100;
+                        mat.iridescence.maximumThickness = 400;
+                        mat.albedoColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+                        break;
+
+                    case 'clearcoat':
+                        mat.clearCoat.isEnabled = true;
+                        mat.clearCoat.intensity = 1.0;
+                        mat.albedoColor = new BABYLON.Color3(0.8, 0.2, 0.2);
+                        break;
+                        
+                    case 'sheen':
+                        mat.sheen.isEnabled = true;
+                        mat.sheen.intensity = 1.0;
+                        mat.sheen.color = new BABYLON.Color3(1.0, 0.8, 0.6);
+                        mat.albedoColor = new BABYLON.Color3(0.3, 0.2, 0.5);
+                        break;
+                }
+                
+                mesh.material = mat;
+            }
+        </script>
+    </body>
+</html>

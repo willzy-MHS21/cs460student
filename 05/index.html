@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>CS460 Assignment 5</title>
+
+        <style>
+            html, body { 
+                background-color:#000;
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                overflow: hidden !important;  
+            }
+        </style>
+
+        <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+        <script src="https://mrdoob.github.io/stats.js/build/stats.min.js"></script>
+
+        <script type="importmap"> {
+            "imports": {
+                "three": "https://unpkg.com/three@latest/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@latest/examples/jsm/"
+            }
+        }
+        </script>
+
+        <script type="module">
+            import * as THREE from 'three';
+            import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+            import { AnaglyphEffect } from 'three/addons/effects/AnaglyphEffect.js';
+            import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+            import { Pane } from 'https://cdn.jsdelivr.net/npm/tweakpane@4.0.5/dist/tweakpane.min.js';
+            import { VertexNormalsHelper } from 'three/addons/helpers/VertexNormalsHelper.js';
+
+            var renderer, controls, scene, camera, loader, pane, stats;
+            var anaglyphEffect;
+
+            window['SCENE'] = {
+                'anaglyph': false,
+                'poly': null,
+
+                'rotate_poly': false,
+                'do_rotate_poly': function() {
+                    window['SCENE']['rotate_poly'] = !window['SCENE']['rotate_poly'];
+                },
+
+                'blender': null,
+                'rotate_blender': false,
+                'do_rotate_blender': function() {
+                    window['SCENE']['rotate_blender'] = !window['SCENE']['rotate_blender'];
+                },
+
+                'blender_old_material': null,
+                'change_material': function() {
+                    if (!window['SCENE']['blender_old_material']) {
+                        window['SCENE']['blender_old_material'] = window['SCENE']['blender'].material.clone();
+                        window['SCENE']['blender'].material = new THREE.MeshNormalMaterial();
+                    } else {
+                        window['SCENE']['blender'].material = window['SCENE']['blender_old_material'].clone();
+                        window['SCENE']['blender_old_material'] = null;
+                    }
+                }
+            };
+
+            window.onload = function() {
+                scene = new THREE.Scene();
+
+                // Setup the camera
+                var fov = 75;
+                var ratio = window.innerWidth / window.innerHeight;
+                var zNear = 0.1;
+                var zFar = 10000;
+                camera = new THREE.PerspectiveCamera(fov, ratio, zNear, zFar);
+                camera.position.set(0, 0, 100);
+
+                // Create renderer and setup the canvas
+                renderer = new THREE.WebGLRenderer({antialias: true});
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(renderer.domElement);
+
+                // Setup Stats
+                stats = new Stats();
+                document.body.appendChild( stats.domElement );
+
+                // Setup Anaglyph Effect
+                anaglyphEffect = new AnaglyphEffect(renderer);
+                anaglyphEffect.setSize(window.innerWidth, window.innerHeight);
+
+                // Setup lights (ambient and one directional)
+                var ambientLight = new THREE.AmbientLight();
+                scene.add(ambientLight);
+
+                var light = new THREE.DirectionalLight(0xffffff, 5.0);
+                light.position.set(10, 100, 10);
+                scene.add(light);
+
+                // Load the unedited 3D model
+                loader = new GLTFLoader();
+
+                loader.load('poly.glb', function(gltf) {
+                    var poly = gltf.scenes[0].children[0];
+
+                    poly.scale.x = 10;
+                    poly.scale.y = 10;
+                    poly.scale.z = 10;
+
+                    poly.quaternion.w = 1;
+                    poly.quaternion.x = 0;
+                    poly.quaternion.y = 0;
+                    poly.quaternion.z = 0;
+
+                    camera.position.set(0.2, 10, 1);
+
+                    window.SCENE.poly = poly;
+
+                    scene.add(gltf.scene);
+
+                    // Setup PolyCam Mesh UI panel after loading poly.glb
+                    var polyui = pane.addFolder({title: 'PolyCam Mesh'});
+                    polyui.addBinding(window.SCENE.poly.material, 'wireframe');
+                    polyui.addButton({title:'rotate!'}).on('click', () => {
+                        window.SCENE.do_rotate_poly();
+                    });
+                });
+
+                loader.load('bear.glb', function(gltf) {
+                    var blender = gltf.scenes[0].children[0];
+                    
+                    blender.scale.x = 10;
+                    blender.scale.y = 10;
+                    blender.scale.z = 10;
+
+                    blender.quaternion.w = 1;
+                    blender.quaternion.x = 0;
+                    blender.quaternion.y = 0;
+                    blender.quaternion.z = 0;
+
+                    blender.translateX(6);
+
+                    window.SCENE.blender = blender;
+                    
+                    // Create and setup the VertexNormalsHelper
+                    var helper = new VertexNormalsHelper(blender, 0.1, 'blue');
+                    helper.visible = false;
+                    window.SCENE.blender_helper = helper;
+                    scene.add(helper);
+
+                    scene.add(gltf.scene);
+
+                    // Setup blender Mesh UI panel after loading bear.glb
+                    var blenderui = pane.addFolder({title: 'Blender Mesh'});
+                    blenderui.addBinding(helper, 'visible', {label: 'Show normals!'});
+                    blenderui.addButton({title:'rotate!'}).on('click', () => {
+                        window.SCENE.do_rotate_blender();
+                    });
+                    blenderui.addButton({title: 'Change Material'}).on('click', () => {
+                        window.SCENE.change_material();
+                    });
+                });
+
+                // Setup Tweakpane
+                pane = new Pane();
+                var sceneui = pane.addFolder({title: 'Scene'});
+
+                // Anaglyph toggle
+                sceneui.addBinding(window.SCENE, 'anaglyph');
+
+                // Directional light and ambient light controls
+                sceneui.addBinding(light.position, 'x', {min: -100, max: 100, label: 'Light X'});
+                sceneui.addBinding(light.position, 'y', {min: -100, max: 100, label: 'Light Y'});
+                sceneui.addBinding(light.position, 'z', {min: -100, max: 100, label: 'Light Z'});
+                sceneui.addBinding(light, 'intensity', {min: 0, max: 10, label: 'Intensity'});
+                sceneui.addBinding(ambientLight, 'color', {label: 'AmbientLight Color'});
+
+                // interaction
+                controls = new OrbitControls(camera, renderer.domElement);
+
+                animate();
+            };
+
+            function animate() {
+                requestAnimationFrame(animate);
+
+                controls.update();
+
+                stats.update();
+
+                // Handle PolyCam rotation with slerp
+                if (window.SCENE.poly) {
+                    if (window.SCENE.rotate_poly) {
+                        // Create a 180 degree rotation quaternion around Y-axis
+                        var targetQuaternion = new THREE.Quaternion();
+                        targetQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+                        
+                        // Slerp towards the 180 degree rotation
+                        window.SCENE.poly.quaternion.slerp(targetQuaternion, 0.1);
+                    } else {
+                        // Reset to identity quaternion
+                        var identityQuaternion = new THREE.Quaternion(0, 0, 0, 1);
+                        
+                        // Slerp back to identity
+                        window.SCENE.poly.quaternion.slerp(identityQuaternion, 0.1);
+                    }
+                }
+
+                // Handle Blender rotation with slerp
+                if (window.SCENE.blender) {
+                    if (window.SCENE.rotate_blender) {
+                        // Create a 180 degree rotation quaternion around Y-axis
+                        var targetQuaternion = new THREE.Quaternion();
+                        targetQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+                        
+                        // Slerp towards the 180 degree rotation
+                        window.SCENE.blender.quaternion.slerp(targetQuaternion, 0.1);
+                    } else {
+                        // Reset to identity quaternion
+                        var identityQuaternion = new THREE.Quaternion(0, 0, 0, 1);
+                        
+                        // Slerp back to identity
+                        window.SCENE.blender.quaternion.slerp(identityQuaternion, 0.1);
+                    }
+                }
+
+                // Render the scene with or without anaglyph effect
+                if (window.SCENE.anaglyph) {
+                    anaglyphEffect.render(scene, camera);
+                } else {
+                    renderer.render(scene, camera);
+                }
+            }
+        </script>
+    </head>
+    
+    <body>
+
+    </body>
+</html>
